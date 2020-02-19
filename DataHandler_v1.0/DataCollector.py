@@ -70,3 +70,53 @@ for ret in df['Returns']:
 
 df['Signal'] = signalList
 
+maxAbsScaler = preprocessing.MaxAbsScaler()
+
+modelDict = {}
+
+df.dropna(inplace=True)
+
+X = np.array(df.drop(['Signal', 'Returns'], 1))
+X = preprocessing.MaxAbsScaler.fit_transform(X)
+Y = np.array(df['Signal'])
+
+xTrain, xTest, yTrain, yTest = train_test_split(X, Y, test_size=0.3)
+
+modelDict = {}
+modelDict['X Train'] = xTrain
+modelDict['X Test'] = xTest
+modelDict['Y Train'] = yTrain
+modelDict['Y Test'] = yTest
+
+model = svm.SVC(kernel='rbf', decision_function_shape='ovo')
+
+model.fit(modelDict['X Train'], modelDict['Y Train'])
+yPredict = model.predict(modelDict['X Test'])
+
+modelDict['Y Prediction'] = yPredict
+
+# print("SVM Model Info for Ticker: "+i)
+# print("Accuracy:",metrics.accuracy_score(Model_Dict[i]['Y Test'], Model_Dict[i]['Y Prediction']))
+modelDict['Accuracy'] = metrics.accuracy_score(modelDict['Y Test'], modelDict['Y Prediction'])
+modelDict['Precision'] = metrics.precision_score(modelDict['Y Test'], modelDict['Y Prediction'], pos_label=str(1), average="macro")
+modelDict['Recall'] = metrics.recall_score(modelDict['Y Test'], modelDict['Y Prediction'], pos_label=str(1), average="macro")
+
+prediction_length = len(modelDict['Y Prediction'])
+
+df['SVM Signal'] = 0
+df['SVM Returns'] = 0
+df['Total Strat Returns'] = 0
+df['Market Returns'] = 0
+
+Signal_Column = df.columns.get_loc('SVM Signal')
+Strat_Column = df.columns.get_loc('SVM Returns')
+Return_Column = df.columns.get_loc('Total Strat Returns')
+Market_Column = df.columns.get_loc('Market Returns')
+
+df.iloc[-prediction_length:, Signal_Column] = list(map(int, modelDict['Y Prediction']))
+df['SVM Returns'] = df['SVM Signal'] * df['Returns'].shift(-1)
+
+df.iloc[-prediction_length:, Return_Column] = np.nancumsum(df['SVM Returns'][-prediction_length:])
+df.iloc[-prediction_length:, Market_Column] = np.nancumsum(df['Returns'][-prediction_length:])
+
+modelDict['Sharpe_Ratio'] = (df['Total Strat Returns'][-1] - df['Market Returns'][-1]) / np.nanstd(df['Total Strat Returns'][-prediction_length:])
